@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>오늘 음식 추천</title>
+<link href="https://cdn.jsdelivr.net/gh/sunn-us/SUIT/fonts/static/woff2/SUIT.css" rel="stylesheet">
+<style>
+body{
+  margin:0;
+  font-family:'SUIT', sans-serif;
+  background:#f5f6f8;
+  color:#111;
+  display:flex;
+  justify-content:center;
+}
+.container{
+  width:100%;
+  max-width:560px;
+  padding:20px;
+}
+.card{background:#fff;border-radius:18px;padding:60px 16px;box-shadow:0 8px 24px rgba(0,0,0,0.06);margin-bottom:18px;}
+
+h1{font-size:40px;font-weight:800;margin:0 0 10px;text-align:left;line-height:1.05;}
+.subtext{font-size:16px;color:#555;line-height:1.5;text-align:left;margin-bottom:0;padding-bottom:20px;border-bottom:1px solid #eaeaea;}
+
+.filters{display:flex;flex-direction:column;gap:12px;}
+.country-top{display:flex;gap:10px;width:100%;}
+.country-top button{flex:1;height:38px;border-radius:10px;border:1px solid #ddd;background:#fff;font-weight:600;cursor:pointer;}
+
+.country-box{display:flex;flex-wrap:wrap;gap:8px;}
+.country-box label{
+  width:90px;
+  text-align:center;
+  padding:8px 6px;
+  border-radius:10px;
+  border:1px solid #e5e5e5;
+  font-size:12px;
+  cursor:pointer;
+  opacity:0.4;
+  transition:0.2s;
+  user-select:none;
+}
+.country-box label.active{opacity:1;border:1px solid #111;}
+.country-box input{display:none;}
+
+select{height:40px;border-radius:10px;border:1px solid #ddd;padding:0 10px;}
+button.main{width:100%;height:44px;border-radius:12px;border:none;background:#111;color:#fff;font-weight:700;cursor:pointer;display:block;transition:all 0.15s ease;} button.main:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.12);} button.main:active{transform:translateY(0px) scale(0.98);box-shadow:0 2px 6px rgba(0,0,0,0.12);}
+button.main:hover{transform:translateY(-1px);box-shadow:0 6px 14px rgba(0,0,0,0.12);}
+button.main:active{transform:translateY(0px) scale(0.98);box-shadow:0 2px 6px rgba(0,0,0,0.12);}
+button:disabled{opacity:0.4;}
+
+/* SLOT */
+.slot-window{
+  margin-top:14px;
+  height:300px;
+  overflow:hidden;
+  border-radius:14px;
+  border:1px solid #e5e5e5;
+  background:#fff;
+  position:relative;
+}
+
+.slot-list{
+  position:absolute;
+  width:100%;
+  top:0;
+}
+
+.slot-item{height:60px;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;border-bottom:1px solid #f2f2f2;font-size:13px;opacity:0.5;transform:scale(0.95);transition:all 0.25s ease;}
+
+.slot-item.active{opacity:1;transform:scale(1.15);font-weight:700;box-shadow:0 10px 18px rgba(0,0,0,0.08);}
+
+.result{margin-top:14px;}
+.food-card{background:#fff;border-radius:14px;padding:14px;box-shadow:0 6px 18px rgba(0,0,0,0.05);animation:fadeInUp 0.35s ease;}
+.food-title{font-size:18px;font-weight:800;margin-bottom:6px;}
+.small{font-size:13px;color:#555;margin-bottom:4px;}
+
+@keyframes fadeInUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body>
+
+<div class="container">
+<div class="card">
+
+<h1>오늘 뭐 먹지</h1>
+<div class="subtext">오늘 드시고 싶은 음식을 선택해보세요.<br>국가와 칼로리를 선택하고 랜덤 추천을 받아보세요.</div>
+
+<div class="filters">
+
+<div class="country-top">
+<button onclick="selectAll(true)">전체 선택</button>
+<button onclick="selectAll(false)">전체 해제</button>
+</div>
+
+<div class="country-box">
+<label><input type="checkbox" value="korea" checked>한식</label>
+<label><input type="checkbox" value="china" checked>중식</label>
+<label><input type="checkbox" value="japan" checked>일식</label>
+<label><input type="checkbox" value="west" checked>양식</label>
+<label><input type="checkbox" value="southeast" checked>동남아</label>
+<label><input type="checkbox" value="india" checked>인도</label>
+<label><input type="checkbox" value="mexico" checked>멕시코</label>
+<label><input type="checkbox" value="middleeast" checked>중동</label>
+</div>
+
+<select id="calorie">
+<option value="all">칼로리 전체</option>
+<option value="low">저칼로리</option>
+<option value="normal">무난</option>
+<option value="high">고칼로리</option>
+</select>
+
+<button class="main" id="spinBtn" onclick="spin()">추천 돌리기</button>
+</div>
+
+<div class="slot-window">
+<div class="slot-list" id="slot"></div>
+</div>
+
+<div class="result" id="result"><div class="food-card">아직 선택된 음식이 없습니다</div></div>
+
+</div>
+</div>
+
+<script>
+let foods=[];
+let isSpinning=false;
+let pos=0,speed=30,interval,itemsData=[];
+
+const ctx=new (window.AudioContext||window.webkitAudioContext)();
+
+function beep(f=500){
+  if(!ctx) return;
+  const o=ctx.createOscillator();
+  const g=ctx.createGain();
+  o.connect(g);g.connect(ctx.destination);
+  o.frequency.value=f;
+  g.gain.value=0.02;
+  o.start();
+  g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.12);
+  o.stop(ctx.currentTime+0.12);
+}
+
+function add(n,c,k){
+  foods.push({
+    name:n,
+    country:c,
+    kcal:k,
+    type:k<400?"low":k>700?"high":"normal",
+    p:10+Math.random()*40|0,
+    f:5+Math.random()*30|0,
+    c:20+Math.random()*80|0
+  });
+}
+
+const sets={
+  korea:[["김치찌개",450],["비빔밥",520],["불고기",650],["삼겹살",780],["냉면",300],["김밥",400],["된장찌개",420],["갈비찜",800],["순두부찌개",380],["떡볶이",600],["제육볶음",700],["칼국수",550],["감자탕",750],["치킨",900],["보쌈",800],["라면",500],["쌈밥",480],["닭갈비",720],["설렁탕",450],["오징어볶음",620]],
+  china:[["짜장면",650],["짬뽕",750],["마라탕",800],["탕수육",850],["볶음밥",600],["양장피",700],["깐풍기",780],["마파두부",650],["훠궈",900],["딤섬",450]],
+  japan:[["초밥",400],["라멘",750],["돈까스",800],["우동",500],["소바",350],["오니기리",300],["가츠동",700],["규동",650],["텐동",720],["나베",650]],
+  west:[["피자",900],["파스타",650],["햄버거",850],["스테이크",950],["샐러드",300],["라자냐",800],["리조또",700],["프렌치프라이",600],["핫도그",500],["치킨윙",750]],
+  southeast:[["팟타이",600],["쌀국수",450],["나시고랭",700],["똠얌꿍",550],["반미",500]],
+  india:[["카레",700],["난",300],["비리야니",750],["탄두리치킨",800],["사모사",400]],
+  mexico:[["타코",500],["부리또",800],["나초",650],["엔칠라다",750],["퀘사디아",700]],
+  middleeast:[["케밥",700],["후무스",400],["샤와르마",750],["팔라펠",500],["바바가누쉬",450]]
+};
+
+Object.entries(sets).forEach(([k,v])=>v.forEach(x=>add(x[0],k,x[1])));
+
+function getSelected(){return [...document.querySelectorAll('.country-box input:checked')].map(e=>e.value);}
+
+function filter(){
+  const c=getSelected();
+  const cal=document.getElementById('calorie').value;
+  return foods.filter(f=>c.includes(f.country)&&(cal==='all'||f.type===cal));
+}
+
+// ✅ FIX: label UI sync guaranteed
+function syncLabels(){
+  document.querySelectorAll('.country-box label').forEach(label=>{
+    const input=label.querySelector('input');
+    label.classList.toggle('active',input.checked);
+  });
+}
+
+function bindUI(){
+  document.querySelectorAll('.country-box input').forEach(inp=>{
+    inp.addEventListener('change',syncLabels);
+  });
+
+  document.querySelectorAll('.country-box label').forEach(label=>{
+    label.addEventListener('click',()=>{
+      setTimeout(syncLabels,0);
+    });
+  });
+}
+
+function selectAll(v){
+  document.querySelectorAll('.country-box input').forEach(e=>e.checked=v);
+  syncLabels();
+}
+
+async function spin(){
+  if(isSpinning) return;
+  isSpinning=true;
+  document.getElementById('spinBtn').disabled=true;
+
+  if(ctx.state==='suspended') await ctx.resume();
+
+  const list=filter();
+  if(!list.length){
+    isSpinning=false;
+    document.getElementById('spinBtn').disabled=false;
+    return;
+  }
+
+  const slot=document.getElementById('slot');
+  slot.innerHTML='';
+  itemsData=[];
+
+  for(let i=0;i<60;i++){
+    const f=list[Math.random()*list.length|0];
+    itemsData.push(f);
+    const d=document.createElement('div');
+    d.className='slot-item';
+    d.innerHTML=`${f.name}<br>${f.kcal}kcal`;
+    slot.appendChild(d);
+  }
+
+  pos=0;speed=35;
+  clearInterval(interval);
+
+  interval=setInterval(()=>{
+    pos+=speed;
+    speed*=0.96;
+
+    const idx=Math.floor(pos/60);
+    const items=document.querySelectorAll('.slot-item');
+
+    items.forEach((e,i)=>{
+      const center=idx+2;
+      const diff=Math.abs(i-center);
+      e.classList.toggle('active',diff===0);
+      e.style.opacity = diff===0 ? 1 : 0.5;
+      e.style.transform = diff===0 ? 'scale(1.15)' : 'scale(0.95)';
+    });
+
+    slot.style.transform=`translateY(-${pos}px)`;
+
+    if(speed<0.6){
+      clearInterval(interval);
+      const result=itemsData[idx+2]||itemsData[0];
+      beep(800);
+      show(result);
+      document.getElementById('spinBtn').disabled=false;
+      isSpinning=false;
+    }
+  },30);
+}
+
+function show(f){
+  document.getElementById('result').innerHTML=
+  `<div class='food-card'>
+    <div class='food-title'>${f.name}</div>
+    <div class='small'>칼로리 ${f.kcal}</div>
+    <div class='small'>단백질 ${f.p} / 지방 ${f.f} / 탄수화물 ${f.c}</div>
+  </div>`;
+}
+
+// init
+bindUI();
+syncLabels();
+</script>
+</body>
+</html>
